@@ -1,0 +1,1 @@
+set DEBUG=barAdmin:* & npm run debug
