@@ -1,0 +1,27 @@
+POST http://localhost:3200/sprint9/users/signup
+content-type: application/json
+
+{
+    "email": "manuel.garcia.cr@hotmail.com",
+    "nick": "pepe",
+    "firstName": "Jose",
+    "lastName": "Luís",
+    "password": "12345"
+}
+
+###
+POST http://localhost:3200/sprint9/users/login
+content-type: application/json
+
+{
+    "email": "pepe23",
+    "password": "aaaaa"
+}
+
+###
+
+POST https://oauth2.googleapis.com/token
+content-type: application/x-www-form-urlencoded
+user-agent: google-oauth-playground
+
+client_id=407408718192.apps.googleusercontent.com&client_secret=fbrUG7Noiw4nSQXLLS47TV7j&grant_type=refresh_token&refresh_token=1%2F%2F047iCQ4Pd2XhOCgYIARAAGAQSNwF-L9IrAOaoBNnBBD5rZBpZm3E0HZNkj9OWHI5SzFP3k5qH28YuFBUdaobuAeTgk50ymLoqZfI

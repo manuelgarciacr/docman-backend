@@ -1,0 +1,38 @@
+# to existing tables.
+%Image::ExifTool::UserDefined = (
+     # XMP tags may be added to existing namespaces:
+    'Image::ExifTool::XMP::xmp' => {
+        # Example 5.  XMP-xmp:NewXMPxmpTag
+        NewXMPxmpTag => { Groups => { 2 => 'Author' } },
+        # add more user-defined XMP-xmp tags here...
+    },
+    'Image::ExifTool::XMP::xmp' => {
+        NewXMPpdfTag1 => { List => 'Bag'}
+    },
+    # new XMP namespaces (eg. xxx) must be added to the Main XMP table:
+    'Image::ExifTool::XMP::Main' => {
+        # namespace definition for examples 8 to 11
+        xxx => { # <-- must be the same as the NAMESPACE prefix
+            SubDirectory => {
+                TagTable => 'Image::ExifTool::UserDefined::xxx',
+                # (see the definition of this table below)
+            },
+        },
+        # add more user-defined XMP namespaces here...
+    },
+);
+
+# This is a basic example of the definition for a new XMP namespace.
+# This table is referenced through a SubDirectory tag definition
+# in the %Image::ExifTool::UserDefined definition above.
+# The namespace prefix for these tags is 'xxx', which corresponds to
+# an ExifTool family 1 group name of 'XMP-xxx'.
+%Image::ExifTool::UserDefined::xxx = (
+    GROUPS => { 0 => 'XMP', 1 => 'XMP-xxx', 2 => 'Image' },
+    NAMESPACE => { 'xxx' => 'http://ns.myname.com/xxx/1.0/' },
+    WRITABLE => 'string', # (default to string-type tags)
+    # Example 8.  XMP-xxx:NewXMPxxxTag1 (an alternate-language tag)
+    # - replace "NewXMPxxxTag1" with your own tag name (eg. "MyTag")
+    NewXMPxxxTag1 => { Writable => 'lang-alt' },
+);
+
