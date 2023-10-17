@@ -16,7 +16,7 @@ const cookieParser = require('cookie-parser');
 ////////// end passport
 
 //var usersRouter = require('./routes/users');
-const usersRouter = require('../routes/users');
+const usersRouter = require('./routes/users');
 
 ////////// mongo
 ////
