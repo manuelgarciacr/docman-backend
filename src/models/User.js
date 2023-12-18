@@ -22,7 +22,7 @@ const userSchema = new Schema({
         required: true,
         unique: true
     },
-    nick: {
+    collection: {
         type: String
     },
     role: {
@@ -33,7 +33,7 @@ const userSchema = new Schema({
     timestamps: true
 });
 
-userSchema.methods.encryptPassword = async pwd => await bcrypt.hash(pwd, 12);
+// userSchema.methods.encryptPassword = async pwd => await bcrypt.hash(pwd, 12);
 userSchema.methods.checkPassword = async pwd => await bcrypt.compare(pwd, this.password);
 
 module.exports = model('User', userSchema);

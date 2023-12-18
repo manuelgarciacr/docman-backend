@@ -1,9 +1,9 @@
 const mongoose = require('mongoose');
 const url = process.env.MONGO_URL;
 
-mongoose.set('useFindAndModify', false);
-mongoose.set('useCreateIndex', true);
-mongoose.set('useNewUrlParser', true);
+mongoose.set("useNewUrlParser", true);
+mongoose.set("useFindAndModify", false);
+mongoose.set("useCreateIndex", true);
 
 const connect = mongoose.connect(url, {  useUnifiedTopology: true }); // Another way to configure options 
 
