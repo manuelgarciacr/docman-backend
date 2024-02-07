@@ -4,17 +4,25 @@
  * Setting environment
  */
 
-debug = require('debug')('sprint9') // Global function
-require('dotenv').config(); // Environment vars
-  
-const app = require('../src/server'); // Importing Express server
-const http = require('http'); // Or https
+//debug = require('debug')('sprint9') // Global function
+//require('dotenv').config(); // Environment vars
+//console.log(process.env)
+//const app = require('../src/server'); // Importing Express server
+//const http = require('http'); // Or https
+import debug from 'debug';
+import 'dotenv/config';
+import app from '../src/server.js'; // Importing Express server
+import http from 'http'; // Or https
+
+const log = debug('www:log');
+const error = debug('www:error');
 
 /**
  * Connect to database
  */
 
-require('../src/database');
+//require('../src/database');
+import '../src/database.js';
 
 /**  
  * Create HTTP server.
@@ -33,11 +41,11 @@ var server = http.createServer(app); // Or https
 // server.on('listening', onListening);
 app.get('port').then(port => {
     var listener = server.listen(port, function(){
-        console.log('Listening on port ' + listener.address().port);
+        //log('Listening on port %s', listener.address().port);
     });
     server.on('error', onError);
     server.on('listening', onListening);
-}).catch(err => console.error("ERROR:", err))
+}).catch(err => error("ERROR: %s", err))
   
 /**
  * Event listener for HTTP server "error" event.
@@ -48,7 +56,6 @@ function onError(error) {
         throw error;
     }
     const port = app.get('port');
-debug("err", error)
     const bind = typeof port === 'string'
         ? 'Pipe ' + port
         : 'Port ' + port;
@@ -56,13 +63,13 @@ debug("err", error)
     // handle specific listen errors with friendly messages
     switch (error.code) {
         case 'EACCES':
-            console.error(bind + ' requires elevated privileges');
+            error('ERROR: %s requires elevated privileges', bind);
             process.exit(1);
             break;
         case 'EADDRINUSE':
             // lsof -i tcp:3200
             // kill -9 PID
-            console.error(bind + ' is already in use');
+            error('ERROR: %s is already in use', bind);
             process.exit(1);
             break;
         default:
@@ -80,5 +87,5 @@ function onListening() {
         ? 'pipe ' + addr
         : 'port ' + addr.port;
 
-    debug('debug: Listening on ' + bind);
+    log('Listening on %s', bind);
 }

@@ -4,4 +4,4 @@ documentCtrl.renderDocument = (req, res) => {
     res.render('viewer')
 }
 
-module.exports = documentCtrl;
+export { documentCtrl };

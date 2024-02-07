@@ -1,5 +1,7 @@
-const {Schema, model} = require('mongoose');
-const bcrypt = require('bcryptjs');
+// const {Schema, model} = require('mongoose');
+// const bcrypt = require('bcryptjs');
+import { Schema, model } from 'mongoose';
+import bcrypt from 'bcryptjs';
 
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
@@ -21,9 +23,6 @@ const userSchema = new Schema({
         type: String,
         required: true,
         unique: true
-    },
-    collection: {
-        type: String
     },
     role: {
         type: String,

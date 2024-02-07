@@ -1,16 +1,17 @@
-const { Router} = require('express');
+import { Router } from "express";
+import { userCtrl } from "../controllers/index.js";
+
 const router = Router();
-const userCtrl = require('../controllers/user.controller');
 
-router.get('/user'); // all users
-router.get('/user/:id'); // one user
+// router.get('/user'); // all users
+// router.get('/user/:id'); // one user
 
-router.post('/user:signup'); // one user
-router.post('/user:login'); // one user
-router.post('/user:logout'); // one user
+router.post("/user/signup", userCtrl.signup); // one user
+router.post("/user/signin", userCtrl.signin); // one user
+router.post("/user/logout", userCtrl.logout); // one user
 
-router.patch('/user/'); // one user
+// router.patch('/user/'); // one user
 
-router.delete('/user/:id'); // one document
+// router.delete('/user/:id'); // one document
 
 module.exports = router;

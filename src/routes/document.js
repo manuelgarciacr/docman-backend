@@ -1,17 +1,21 @@
-const { Router} = require('express');
+import { Router } from "express";
+import { documentCtrl } from "../controllers/index.js";
+
 const router = Router();
-const documentCtrl = require('../controllers/document.controller');
 
-router.get('/document'); // all documents
-router.get('/document/:id'); // one document
-router.get('/document/:id/view', documentCtrl.renderDocument); // one document render
-router.get('/document/:id/data'); // one document metadata
-router.get('/document/:id/object'); // one document object
+router.get("/document", (req, res) => res.sendStatus(200)); // all documents
+router.get("/document/:id"); // one document
+router.get("/document/:id/render", documentCtrl.renderDocument); // one document render
+router.get("/document/:id/data"); // one document metadata
+router.get("/document/:id/object"); // one document object
 
-router.post('/document'); // one or more documents
+router.post("/document", (req, res) => {
+    const { a, b} = req.body;
 
-router.patch('/document/'); // one document
+}); // one or more documents
 
-router.delete('/document/:id'); // one document
+router.patch("/document/"); // one document
 
-module.exports = router;
+router.delete("/document/:id"); // one document
+
+export { router as documentRouter};
