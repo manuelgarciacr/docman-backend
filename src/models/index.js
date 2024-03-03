@@ -1,3 +1,5 @@
-export * from './User';
+export * from './User.js';
 export * from './Document.js';
-export * from './Collection';
+export * from './Collection.js';
+export * from './Registration.js';
+export * from './Token.js';

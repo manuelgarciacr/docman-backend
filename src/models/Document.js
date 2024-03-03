@@ -21,4 +21,4 @@ const documentSchema = new Schema(
 
 documentSchema.index({ name: 1, folder: 1 }, { unique: true });
 
-module.exports = documentSchema;
+export { documentSchema };

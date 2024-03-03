@@ -9,4 +9,4 @@ const router = Router();
 router.get('/render', renderCtrl.renderDocument)
 
 //module.exports = router;
-export {router as renderRoute};
+export { router as renderingsRouter };

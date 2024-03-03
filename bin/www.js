@@ -12,10 +12,13 @@
 import debug from 'debug';
 import 'dotenv/config';
 import app from '../src/server.js'; // Importing Express server
-import http from 'http'; // Or https
+import https from 'https'; // Or http
+import fs from "fs";
 
 const log = debug('www:log');
 const error = debug('www:error');
+const key = fs.readFileSync(process.env.KEY);
+const cert = fs.readFileSync(process.env.CERT);
 
 /**
  * Connect to database
@@ -28,7 +31,7 @@ import '../src/database.js';
  * Create HTTP server.
  */
 
-var server = http.createServer(app); // Or https  
+var server = https.createServer({ key, cert }, app); // Or http 
 
 /**
  * Listen on provided port, on all network interfaces.

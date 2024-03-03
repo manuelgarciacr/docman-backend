@@ -60,3 +60,10 @@ typings/
 
 # next.js build output
 .next
+
+# PM2 config
+ecosystem.config.js
+
+# SSL
+
+.ssl

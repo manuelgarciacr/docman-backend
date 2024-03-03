@@ -1,10 +1,14 @@
-const nodemailer = require('nodemailer'); // Send emails
+import nodemailer from 'nodemailer'; // Send emails
+import * as google from "googleapis";
+import emailCfg from "./emailCfg.js";
 
 ////////// emails (gmail)
 ////
-const { google } = require("googleapis");
-const OAuth2 = google.auth.OAuth2;
 
+//const { google } = require("googleapis");
+
+//const OAuth2 = google.auth.OAuth2;
+const OAuth2 = google.Auth.OAuth2
 const createGmailTransporter = async () => {
          
     const oauth2Client = new OAuth2(
@@ -49,25 +53,47 @@ const createIonosTransporter = () =>
         host: "smtp.ionos.es",
         port: 587,
         auth: {
-            user: "english@manuelgc.eu",
-            pass: process.env.EMAIL_PWD
-        }
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PWD,
+        },
     });
 ////
 ////////// emails (IONOS)
 
+////////// emails (Curl)
+////
+const createCurlTransporter = () =>
+    nodemailer.createTransport({
+        host: "smtp.office365.com",
+        port: 587,
+        secure: false,
+        auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PWD,
+        },
+        // tls: {
+        //     ciphers: "SSLv3",
+        // }
+    });
+////
+////////// emails (Curl)
+
+const env = process.env.NODE_ENV || "development";
+
 let createTransporter = (env === 'production') 
     ? createIonosTransporter
-    : createGmailTransporter;
+    : createCurlTransporter;
+    //: createGmailTransporter;
 
 const sendEmail = async (emailOptions) => {
     let emailTransporter = await createTransporter();
     return emailTransporter.sendMail(emailOptions)
 };
 
-exports.sendCode = (email, code) => {
-    const mailData = { ...config.mailData, to: email, html: config.mailData.html + code + '</p>' };
-    mailData.subject = code + " " + mailData.subject;
-    return sendEmail(mailData)
-    .then(msg => code);
-}
+const sendResource = (from, to, type, value) => {
+    const mailData = emailCfg.getMailData(type, value, from, to);
+
+    return sendEmail(mailData).then(msg => console.log(msg));
+};
+
+export { sendResource }

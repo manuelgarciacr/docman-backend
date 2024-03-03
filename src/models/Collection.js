@@ -1,8 +1,18 @@
-import { Schema, model } from "mongoose";
-import Document from './Document';
+import { Schema, model, Types } from "mongoose";
+import { documentSchema } from './index.js';
+
+const EXPIRATION = parseInt(process.env.EXPIRATION ?? "10");
 
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
+
+const Role = {
+    admin: "admin",
+    owner:  "owner",
+    default: "default"
+}
+
+Object.freeze(Role);
 
 const collectionSchema = new Schema(
     {
@@ -14,18 +24,33 @@ const collectionSchema = new Schema(
         description: {
             type: String,
             required: true,
-            default: "None"
+            default: "",
         },
-        owner: {
-            type: ObjectId,
-            ref: 'User'
+        enabled: {
+            type: Boolean,
+            required: true,
+            default: false,
         },
-        users: [{type: ObjectId, ref: 'User'}], /* owner is included */
-        documents: [Document]
+        expireAt: {
+            type: Date,
+            expires: 0,
+            default: () => new Date(Date.now() + 1000 * 60 * EXPIRATION),
+        },
+        // owner: {
+        //     type: Types.ObjectId,
+        //     ref: 'User'
+        // },
+        users: [
+            { type: Types.ObjectId, ref: "User", unique: true },
+        ] /* owner is included */,
+        roles: [{ type: String, enum: Object.keys(Role) }],
+        documents: [documentSchema],
     },
     {
         timestamps: true,
     }
 );
 
-module.exports = model("Collection", collectionSchema);
+const Collection = model("Collection", collectionSchema);
+
+export { Collection, Role };
