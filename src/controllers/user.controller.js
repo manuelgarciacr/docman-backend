@@ -8,7 +8,9 @@ userCtrl.emailExists = async (req, res, next) => {
         const count = await User.countDocuments({
             "email": email,
         }).exec();
+
         res.json({ status: 200, message: count > 0, data: [] })
+
     } catch (err) {
         return next(err)
     }

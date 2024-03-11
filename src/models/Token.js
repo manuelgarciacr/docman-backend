@@ -42,6 +42,10 @@ tokenSchema.methods.increment = function () {
     ++this.pcounter
 };
 
+tokenSchema.methods.setMaxAge = function (seconds) {
+    this.expireAt = Date.now() + seconds * 1000
+}
+
 const Token = model("Token", tokenSchema);
 
 export { Token };

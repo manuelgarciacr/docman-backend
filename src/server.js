@@ -12,6 +12,9 @@ import { fileURLToPath } from "url";
 import { normalizePort } from "./helpers/index.js";
 import * as routes from "./routes/index.js";
 import httpError from "./httpError.js";
+import cookieParser from "cookie-parser";
+import fs from "fs";
+import helmet from "helmet";
 
 //const log = debug("server");
 const __filename = fileURLToPath(import.meta.url);
@@ -21,6 +24,8 @@ const port = normalizePort(process.env.PORT || "3000");
 const V1 = /^\/V1/;
 const V2 = /^\/V1/;
 const V1_2 = /^\/V[1-2]/;
+const privateKey = fs.readFileSync(process.env.KEY, {encoding: "utf8"});
+const corsOptions = { origin: "https://localhost:4200", credentials: true };
 
 // Settings
 
@@ -41,13 +46,19 @@ app.set("view engine", "hbs");
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
-app.use(cors({origin: "http://localhost:4200"}));
+app.use(cors(corsOptions));
+app.use(cookieParser( privateKey));
+app.use(helmet());
 
-// Routes
+// Routess
+// app.use((req, res, next) => {
+//     console.log("RRRSSCC");
+//     res.next()
+// });
 app.use(V1, routes.documentRouter);
-app.use(V1, routes.usersRouter);
-app.use(V1, routes.collectionsRouter);
-app.use(V1, routes.accountsRouter);
+app.use(V1, cors({ ...corsOptions, credentials: true }), routes.usersRouter);
+app.use(V1, cors({ ...corsOptions, credentials: true }), routes.collectionsRouter);
+app.use(V1, cors({ ...corsOptions, credentials: true }), routes.accountsRouter);
 app.use(V1, routes.renderingsRouter);
 
 // Middleware to process errors

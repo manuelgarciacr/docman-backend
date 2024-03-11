@@ -37,40 +37,72 @@ passport.use(
     )
 );
 
-const getHash = (v) => createHash('SHA3-512').update(v).digest('base&4');
+const getHash = (v) => createHash('SHA3-512').update(v).digest('base64');
 
-const getRefreshToken = async (user, collection, stayLogged) => {
+const getRefreshToken = async (userId, collection, stayLogged) => {
     try {
         const userContext = new mongoose.mongo.ObjectId();
         const refreshId = new mongoose.mongo.ObjectId();
-        const nonce = getHash(userContext);
+        const nonce = getHash(userContext.toHexString());
+        const expirationStr = stayLogged ? process.env.REFRESH_LONG_EXPIRATION
+            : process.env.REFRESH_SHORT_EXPIRATION;
+        const expiration = parseInt(expirationStr ?? "0");
         const payload = {
-            alg: "RS512",
-            sub: user._id,
+            sub: userId,
             nonce,
             // Private
             collectionId: collection._id,
-            role: getRole(user._id, collection.users, collection.roles),
+            role: getRole(userId, collection.users, collection.roles),
         };
         const options = {
-            jwtid: getHash(refreshId),
-            expiresIn: stayLogged ? "1d" : "14m",
+            algorithm: "RS512",
+            jwtid: refreshId.toHexString(),
+            expiresIn: expiration,
         };
-        const refreshToken = jwt.sign(payload, privateKey, options);
-        const accessToken = await getAccessToken(payload);
+        const refreshToken = jwt.sign({}, privateKey, options);
+        const accessToken = await getAccessToken(payload, options);
 
-        console.log("REFRESHTOKEN", payload, jwt.verify(refreshToken));
-        console.log("ACCESSTOKEN", jwt.verify(accessToken));
-
-        return Promise.resolve({ refreshToken, accessToken, userContext });
+        return Promise.resolve({ refreshToken, refreshId, accessToken, userContext });
     } catch (err) {
         return Promise.reject(err);
     }
 }
 
+const getOwnerToken = userContext => {
+    try {
+        const expiration = parseInt(process.env.VALIDATION_EXPIRATION);
+        const nonce = getHash(userContext);
+        const payload = {
+            nonce,
+        };
+        const options = {
+            algorithm: "RS512",
+            expiresIn: expiration,
+        };
+        const ownerToken = jwt.sign(payload, privateKey, options);
+
+        return Promise.resolve( ownerToken );
+    } catch (err) {
+        return Promise.reject(err);
+    }
+};
+
+const validateOwnerToken = (ownerToken, userContext) => {
+    try {
+        const nonce = getHash(userContext);
+        const decoded = jwt.verify(ownerToken, publicKey, {
+            nonce
+        });
+
+        return Promise.resolve(decoded);
+    } catch (err) {
+        return Promise.reject(err);
+    }
+};
+
 const renewAccessToken = async (refreshToken, userContext) => {
     try {
-        const payload = jwt.verify()
+        jwt.verify(refreshToken, cert, {complete: true})
         const accessToken = await getAccessToken(payload);
 
         return Promise.resolve(accessToken)
@@ -79,12 +111,12 @@ const renewAccessToken = async (refreshToken, userContext) => {
     }
 }
 
-const getAccessToken = (payload) => {
+const getAccessToken = (payload, options) => {
     try {
         const accessId = new mongoose.mongo.ObjectId();
 
-        payload.jti = getHash(accessId);
-        payload.exp = Math.floor(Date.now() / 1000) + 60 * 5; // Seconds
+        options.jwtid = getHash(accessId.toHexString());
+        options.expiresIn = "5m";
 
         const accessToken = jwt.sign(
             payload,
@@ -99,8 +131,9 @@ const getAccessToken = (payload) => {
 };
 
 const getRole = (userId, users, roles) => {
-    const idx = users.findIndex(v => v == userId);
+    const idx = users.findIndex(v => v.toString() == userId.toString());
+
     return roles[idx]
 }
 
-export { passport, getRefreshToken, renewAccessToken }
+export { passport, getOwnerToken, validateOwnerToken, getRefreshToken, renewAccessToken }

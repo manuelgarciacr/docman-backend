@@ -1,9 +1,9 @@
-import { User, Collection, Registration } from "../models/index.js";
+import { User, Collection, Registration, Token } from "../models/index.js";
 import mongoose from "mongoose"
 import { sendResource } from "../email.js";
 import crypto from "crypto";
 import { getRandomInt } from "../random.js";
-import { passport, getRefreshToken, renewAccessToken } from "../tokens.js";
+import { passport, getOwnerToken, getRefreshToken, renewAccessToken, validateOwnerToken } from "../tokens.js";
 import { checkSchema, validationResult } from "express-validator";
 import { ownerSignupSchema } from "./validationSchemas.js";
 
@@ -11,22 +11,27 @@ const accountCtrl = {};
 const db = mongoose.connection;
 const fn_pad = n => String(n).padStart(5, "0");
 
-accountCtrl.ownerSignupValidation = [
-    // (req, res, next) => {
-    //     console.log(req.body.user);
-    //     req.body.collection.users = 'pepe';
-    //     //req.body.user.enabled = "true";
-    //     console.log(req.body.collection);
-    //     console.log(req.body.stayLoggedIn);
-    //     next();
-    // },
-    checkSchema(ownerSignupSchema),
-    (req, res, next) => {
-        const result = validationResult(req);
-        if (result.isEmpty()) next();
-        else next(result.array());
-    },
-];
+// accountCtrl.ownerSignupValidation = [
+//     (req, res, next) => {
+//         console.log("EMAIL1", req.body.user.email);
+//         next()
+//     },
+//     checkSchema(ownerSignupSchema),
+//     (req, res, next) => {
+//         const result = validationResult(req);
+        
+//         if (result.isEmpty()) {
+//             next();
+//             return
+//         }
+
+//         const errArray = result.array().map(err => err.msg);
+//         const message = errArray.join(' ');
+//         const error = {status: 400, message , data: []}
+
+//         next(error);
+//     },
+// ];
 
 accountCtrl.ownerSignup = async (req, res, next) => {
     await db
@@ -51,6 +56,7 @@ accountCtrl.ownerSignup = async (req, res, next) => {
             await collection.save({ session });
             await registration.save({ session })
 
+            console.log("code:" , code)
             /* sendResource(
                 process.env.EMAIL_USER,
                 user.email,
@@ -59,9 +65,26 @@ accountCtrl.ownerSignup = async (req, res, next) => {
                 //process.env.REDIRECT + user.UUID
             ); */
 
+            const userContext = registration._id.toHexString();
+            const ownerToken = await getOwnerToken(userContext);
+            const expiration = process.env.VALIDATION_EXPIRATION;
+console.log("MA", expiration, userContext)
+            res.cookie("__Host-valctectx", userContext, {
+                httpOnly: true,
+                sameSite: "strict",
+                secure: true,
+                signed: true,
+                //domain: "localhost",
+                maxAge: expiration * 1000, // Thousandths of a second
+            });
+// console.log("OWNERTOKEN", ownerToken)
+
+            //res.set("Authorization", `Bearer ${ownerToken}`);
+            // res.set("access-control-expose-headers", "Authorization");
+
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
-            res.json({ status: 200, message: "Ok", data: [] });
+            res.json({ status: 200, message: "Ok", data: [ownerToken] });
         })
         .catch(err => next(err));
 };
@@ -69,35 +92,76 @@ accountCtrl.ownerSignup = async (req, res, next) => {
 accountCtrl.ownerValidation = async (req, res, next) => {
     await db
         .transaction(async session => {
-            const user = new User(req.body.user);
-            const collection = new Collection(req.body.collection);
-            const code = fn_pad(getRandomInt(1, 99999));
-            const registration = new Registration({
-                userId: user._id,
-                collectionId: collection._id,
-                code: code,
-            });
+            const valctectx = req.signedCookies["__Host-valctectx"];
+            const ownerToken = req.headers.authorization;
+            const code = req.headers.code;
 
-            await user.hashPassword();
+            if (typeof valctectx != "string" || typeof ownerToken != "string"
+                || typeof code != "string")
+                throw "Validation error";
 
-            collection.users.push(user._id);
-            collection.roles.push("owner");
+            await validateOwnerToken(ownerToken, valctectx);
 
-            await user.save({ session });
-            await collection.save({ session });
-            await registration.save({ session });
+            const id = mongoose.Types.ObjectId.createFromHexString(valctectx)
+            const registration = await Registration.findByIdAndDelete(id, {session});
 
-            sendResource(
-                process.env.EMAIL_USER,
-                user.email,
-                "Code",
-                code
-                //process.env.REDIRECT + user.UUID
+            if (registration.code != code)
+                throw {status: 601, message: "Invalid code"}
+
+            const stayLoggedIn = registration.stayLoggedIn;
+            const userId = registration.userId;
+            const collectionId = registration.collectionId;
+            const collection = await Collection.findByIdAndUpdate(
+                collectionId,
+                {
+                    enabled: true,
+                    $unset: { expireAt: "" },
+                },
+                { session }
+            );
+            
+            const tokens = await getRefreshToken(userId, collection, stayLoggedIn);
+            const refreshToken = tokens.refreshToken;
+            const accessToken = tokens.accessToken;
+            const userContext = tokens.userContext;
+            const accessExpiration = process.env.ACCESS_EXPIRATION;
+
+            const loggingExpiration = stayLoggedIn
+                ? process.env.REFRESH_LONG_EXPIRATION
+                : process.env.REFRESH_SHORT_EXPIRATION;
+
+            const refreshId = tokens.refreshId;
+            const dbToken = new Token({
+                _id: refreshId,
+                userId,
+                collectionId,
+                type: "refresh"
+            })
+
+            dbToken.setMaxAge(loggingExpiration);
+
+            await dbToken.save({ session });
+            await User.findByIdAndUpdate(
+                userId,
+                {
+                    enabled: true,
+                    $unset: { expireAt: "" },
+                },
+                { session }
             );
 
+            res.cookie("__Host-ctectx", userContext, {
+                httpOnly: true,
+                sameSite: "strict",
+                secure: true,
+                signed: true,
+                //domain: "localhost",
+                maxAge: accessExpiration * 1000, // Thousandths of a second
+            });
+            
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
-            res.json({ status: 200, message: "Ok", data: [] });
+            res.json({ status: 200, message: "Ok", data: [refreshToken, accessToken] });
         })
         .catch(err => next(err));
 };
