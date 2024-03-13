@@ -3,7 +3,7 @@ import mongoose from "mongoose"
 import { sendResource } from "../email.js";
 import crypto from "crypto";
 import { getRandomInt } from "../random.js";
-import { passport, getOwnerToken, getRefreshToken, renewAccessToken, validateOwnerToken } from "../tokens.js";
+import { passport, getOwnerToken, getRefreshToken, validateRefreshToken, renewAccessToken, validateOwnerToken } from "../tokens.js";
 import { checkSchema, validationResult } from "express-validator";
 import { ownerSignupSchema } from "./validationSchemas.js";
 
@@ -68,7 +68,7 @@ accountCtrl.ownerSignup = async (req, res, next) => {
             const userContext = registration._id.toHexString();
             const ownerToken = await getOwnerToken(userContext);
             const expiration = process.env.VALIDATION_EXPIRATION;
-console.log("MA", expiration, userContext)
+
             res.cookie("__Host-valctectx", userContext, {
                 httpOnly: true,
                 sameSite: "strict",
@@ -77,7 +77,6 @@ console.log("MA", expiration, userContext)
                 //domain: "localhost",
                 maxAge: expiration * 1000, // Thousandths of a second
             });
-// console.log("OWNERTOKEN", ownerToken)
 
             //res.set("Authorization", `Bearer ${ownerToken}`);
             // res.set("access-control-expose-headers", "Authorization");
@@ -141,7 +140,7 @@ accountCtrl.ownerValidation = async (req, res, next) => {
             dbToken.setMaxAge(loggingExpiration);
 
             await dbToken.save({ session });
-            await User.findByIdAndUpdate(
+            const user = await User.findByIdAndUpdate(
                 userId,
                 {
                     enabled: true,
@@ -158,13 +157,42 @@ accountCtrl.ownerValidation = async (req, res, next) => {
                 //domain: "localhost",
                 maxAge: accessExpiration * 1000, // Thousandths of a second
             });
-            
+
+            user.enabled = true;
+            user.password = "";
+            collection.enabled = true;
+
+            const userStr = JSON.stringify(user);
+            const collectionStr = JSON.stringify(collection);
+
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
-            res.json({ status: 200, message: "Ok", data: [refreshToken, accessToken] });
+            res.json({ status: 200, message: "Ok", data: [refreshToken, accessToken, userStr, collectionStr] });
         })
         .catch(err => next(err));
 };
+
+accountCtrl.logout = async (req, res, next) => {
+    await db.transaction(async session => {
+        const refreshToken = req.headers.authorization;
+        
+        if (typeof refreshToken != "string")
+            throw "Logout error";
+
+        const tokenId = await validateRefreshToken(refreshToken);
+        const id = mongoose.Types.ObjectId.createFromHexString(tokenId);
+
+        await Token.findByIdAndDelete(id);
+
+    }).catch(message => {
+        if (message === "Logout error")
+            next({status: 601, message, data: []});
+        else
+            next(message);
+    })
+        
+};
+
 // accountCtrl.signup = async (req, res, next) => {
  
 //     await db.transaction(
@@ -263,10 +291,5 @@ accountCtrl.validate = async (req, res, next) => {
 //         })
 //         .catch(err => next(err));
 // };
-
-
-accountCtrl.logout = (req, res) => {
-    res.send("logout");
-}
 
 export { accountCtrl };

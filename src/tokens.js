@@ -99,10 +99,21 @@ const validateOwnerToken = (ownerToken, userContext) => {
         return Promise.reject(err);
     }
 };
+const validateRefreshToken = (refreshToken) => {
+    try {
+        const decoded = jwt.verify(refreshToken, publicKey)
+
+        return Promise.resolve(decoded);
+    } catch (err) {
+        return Promise.reject(err);
+    }
+};
+
 
 const renewAccessToken = async (refreshToken, userContext) => {
     try {
-        jwt.verify(refreshToken, cert, {complete: true})
+        await validateRefreshToken(refreshToken)
+
         const accessToken = await getAccessToken(payload);
 
         return Promise.resolve(accessToken)
@@ -136,4 +147,4 @@ const getRole = (userId, users, roles) => {
     return roles[idx]
 }
 
-export { passport, getOwnerToken, validateOwnerToken, getRefreshToken, renewAccessToken }
+export { passport, getOwnerToken, validateOwnerToken, getRefreshToken, validateRefreshToken, renewAccessToken }
