@@ -1,13 +1,7 @@
 import { Schema, model, Types } from "mongoose";
-// import {randomUUID} from 'crypto';
-// import { NIL, parse} from "uuid";
-
-const EXPIRATION = parseInt(process.env.VALIDATION_EXPIRATION ?? "600");
 
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
-
-//const emptyUuid = new Types.UUID(NIL);
 
 const registrationSchema = new Schema(
     {
@@ -37,14 +31,18 @@ const registrationSchema = new Schema(
         expireAt: {
             type: Date,
             expires: 0,
-            default: () => new Date(Date.now() + 1000 * EXPIRATION),
         },
     },
     {
         timestamps: true,
     }
 );
+
 registrationSchema.index({ user: 1, collection: 1 }, { unique: true });
+
+registrationSchema.methods.setExpiration = function (seconds) {
+    this.expireAt = Date.now() + seconds * 1000;
+};
 
 const Registration = model("Registration", registrationSchema);
 

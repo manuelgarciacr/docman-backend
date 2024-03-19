@@ -1,8 +1,6 @@
 import { Schema, model, Types } from "mongoose";
 import { documentSchema } from './index.js';
 
-const EXPIRATION = parseInt(process.env.VALIDATION_EXPIRATION ?? "600");
-
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
 
@@ -34,12 +32,7 @@ const collectionSchema = new Schema(
         expireAt: {
             type: Date,
             expires: 0,
-            default: () => new Date(Date.now() + 1000 * EXPIRATION),
         },
-        // owner: {
-        //     type: Types.ObjectId,
-        //     ref: 'User'
-        // },
         users: [
             { type: Types.ObjectId, ref: "User", unique: true },
         ] /* owner is included */,
@@ -50,6 +43,10 @@ const collectionSchema = new Schema(
         timestamps: true,
     }
 );
+
+collectionSchema.methods.setExpiration = function (seconds) {
+    this.expireAt = Date.now() + seconds * 1000;
+};
 
 const Collection = model("Collection", collectionSchema);
 

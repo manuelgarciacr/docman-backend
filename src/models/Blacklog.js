@@ -3,8 +3,12 @@ import { Schema, model, Types } from "mongoose";
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
 
-const tokenSchema = new Schema(
+const blacklogSchema = new Schema(
     {
+        context: {
+            type: String,
+            required: true
+        },
         userId: {
             type: Types.ObjectId,
             ref: "User",
@@ -17,17 +21,8 @@ const tokenSchema = new Schema(
         },
         type: {
             type: String,
-            enum: ['access', 'refresh'],
-            required: true
-        },
-        counter: {
-            type: Number,
-            default: 1,
-            required: true
-        },
-        expireAt: {
-            type: Date,
-            expires: 0,
+            enum: ["access", "refresh"],
+            required: true,
         },
     },
     {
@@ -35,14 +30,6 @@ const tokenSchema = new Schema(
     }
 );
 
-tokenSchema.methods.increment = function () {
-    ++this.pcounter
-};
+const Blacklog = model("Blacklog", blacklogSchema);
 
-tokenSchema.methods.setExpiration = function (seconds) {
-    this.expireAt = Date.now() + seconds * 1000
-}
-
-const Token = model("Token", tokenSchema);
-
-export { Token };
+export { Blacklog };

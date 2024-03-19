@@ -3,8 +3,6 @@
 import { Schema, model, Types } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
-const EXPIRATION = parseInt(process.env.VALIDATION_EXPIRATION ?? "600");
-
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
 
@@ -35,12 +33,7 @@ const userSchema = new Schema(
         expireAt: {
             type: Date,
             expires: 0,
-            default: () => new Date(Date.now() + 1000 * EXPIRATION),
         },
-        // role: {
-        //     type: String,
-        //     default: "default"
-        // }
     },
     {
         timestamps: true,
@@ -50,8 +43,13 @@ const userSchema = new Schema(
 userSchema.methods.hashPassword = function() {
     this.password = bcrypt.hashSync(this.password, 12)
 };
+
 userSchema.methods.checkPassword = function(pwd) {
     return bcrypt.compareSync(pwd, this.password);
+};
+
+userSchema.methods.setExpiration = function (seconds) {
+    this.expireAt = Date.now() + seconds * 1000;
 };
 
 const User = model('User', userSchema);
