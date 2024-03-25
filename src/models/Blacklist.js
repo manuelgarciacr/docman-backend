@@ -28,6 +28,10 @@ blacklistSchema.methods.setExpiration = function (seconds) {
     this.expireAt = Date.now() + seconds * 1000;
 };
 
+blacklistSchema.methods.setExpirationTime = function (time) {
+    this.expireAt = time;
+};
+
 const Blacklist = model("Blacklist", blacklistSchema);
 
 export { Blacklist };

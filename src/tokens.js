@@ -64,7 +64,7 @@ const validateToken = (token, context) => {
         const decoded = jwt.verify(token, publicKey, {
             nonce, algorithms: [algorithm]
         });
-
+        
         return Promise.resolve(decoded);
     } catch (err) {
         return Promise.reject(err);

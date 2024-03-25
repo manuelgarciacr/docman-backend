@@ -24,6 +24,16 @@ const collectionSchema = new Schema(
             required: true,
             default: "",
         },
+        stayLoggedIn: {
+            type: Boolean,
+            required: true,
+            default: false
+        },
+        twoFactor: {
+            type: Boolean,
+            required: true,
+            default: false
+        },
         enabled: {
             type: Boolean,
             required: true,

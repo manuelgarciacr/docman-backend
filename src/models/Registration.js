@@ -15,10 +15,6 @@ const registrationSchema = new Schema(
             ref: "Collection",
             required: true,
         },
-        stayLoggedIn: {
-            type: Boolean,
-            required: true
-        },
         UUID: {
             type: Types.UUID,
             required: false,

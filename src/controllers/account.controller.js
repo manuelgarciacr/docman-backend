@@ -40,12 +40,10 @@ accountCtrl.ownerSignup = async (req, res, next) => {
         .transaction(async session => {
             const user = new User(req.body.user);
             const collection = new Collection(req.body.collection);
-            const stayLoggedIn = req.body.stayLoggedIn;
             const code = fn_pad(getRandomInt(1, 99999));
             const registration = new Registration({
                 userId: user._id,
                 collectionId: collection._id,
-                stayLoggedIn,
                 code: code
             });
             const expiration = parseInt(process.env.VALIDATION_EXPIRATION);
@@ -126,6 +124,7 @@ accountCtrl.ownerValidation = async (req, res, next) => {
                 },
                 { session }
             );
+            collection.enabled = true;
 
             // Enabling user and removing expiration date
 
@@ -138,77 +137,42 @@ accountCtrl.ownerValidation = async (req, res, next) => {
                 },
                 { session }
             );
-
-            const stayLoggedIn = registration.stayLoggedIn;
+            user.enabled = true;
 
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
 
-            newTokens(user, collection, stayLoggedIn, res);
+            newTokens(user, collection, res);
         })
         .catch(err => next(err));
 };
 
-const newTokens = async (user, collection, stayLoggedIn, res) => {
+accountCtrl.login = async (req, res, next) => {
+    const ERROR = { status: 404, message: "Invalid login data", data: [] };
 
-    // Gets the refresh token and its context cookie
+    try {
+        const email = req.body.user.email;
+        const name = req.body.collection.name;
+        const password = req.body.user.password;
+        const user = await User.findOne({ email });
+        const collection = await Collection.findOne({ name });
+        const users = collection?.users ?? [];
+console.log(req.httpVersion)
+        if (!users.includes(user?._id)) throw ERROR;
 
-    const userId = user._id;
-    const collectionId = collection._id;
-    const refreshContext = secureRandom();
-    const refreshExpirationStr = stayLoggedIn
-        ? process.env.REFRESH_LONG_EXPIRATION
-        : process.env.REFRESH_SHORT_EXPIRATION;
-    const refreshExpiration = parseInt(refreshExpirationStr);
-    const { token: refreshToken, cookieOptions: refreshOptions } =
-        await getToken(refreshContext, refreshExpiration, {
-            sub: userId,
-            coll: collectionId,
-        });
+        if (!(await user.checkPassword(password))) throw ERROR;
 
-    res.cookie("__Host-refctx", refreshContext, refreshOptions);
+        if (!user.enabled || !collection.enabled) throw ERROR;
 
-    // Gets the access token and its context cookie
+        user.password = "";
 
-    const accessContext = secureRandom();
-    const accessExpirationStr = process.env.ACCESS_EXPIRATION;
-    const accessExpiration = parseInt(accessExpirationStr);
-    const hash = getHash(refreshContext);
-    const { token: accessToken, cookieOptions: accessOptions } = await getToken(
-        accessContext,
-        accessExpiration,
-        {
-            sub: userId,
-            coll: collectionId,
-            hash,
-        }
-    );
+        // Throw an error to abort the transaction
+        // throw new Error("Oops!");
 
-    res.cookie("__Host-ctectx", accessContext, accessOptions);
-
-    // Remove validation cookie
-
-    const { maxAge, ...validationOptions } = accessOptions;
-
-    res.clearCookie("__Host-valctectx", validationOptions);
-
-    // Preparing the data to respond to the request.
-
-    user.enabled = true;
-    user.password = "";
-    collection.enabled = true;
-
-    const userStr = JSON.stringify(user);
-    const collectionStr = JSON.stringify(collection);
-
-    // Throw an error to abort the transaction
-    // throw new Error("Oops!");
-    
-    res.json({
-        status: 200,
-        message: "Ok",
-        data: [refreshToken, accessToken, userStr, collectionStr],
-    });
+        newTokens(user, collection, stayLoggedIn, res);
+    } catch (err) {
+        next(err);
+    }
 };
 
 accountCtrl.logout = async (req, res, next) => {
@@ -225,12 +189,9 @@ accountCtrl.logout = async (req, res, next) => {
         .then(token => {
             addBlacklist(context, token.iat, token.exp)
         })
-        .catch(err => {
-            throw err
-        }) ;
 
     }).catch(message => {
-        console.log("LOGOUTERROR", message)
+        console.log("LOGOUT ERROR", message)
     }).finally(() => {
         res.json({
             status: 200,
@@ -239,33 +200,6 @@ accountCtrl.logout = async (req, res, next) => {
         });
     })
         
-};
-
-accountCtrl.login = async (req, res, next) => {
-    const ERROR = {status: 404, message: "Invalid login data", data: []}
-
-    try {
-        const email = req.body.user.email;
-        const name = req.body.collection.name;
-        const password = req.body.user.password;
-        const user = await User.findOne({ email });
-        const collection = await Collection.findOne({ name });
-        const users = collection?.users ?? [];
-
-        if (!users.includes(user?._id))
-            throw ERROR;
-
-        if (!await user.checkPassword(password))
-            throw ERROR;
-
-        user.password = "";
-
-        res.json({ status: 200, message: "Ok", data: [user, collection] });
-
-    } catch (err) {
-        console.error("CATCH IN LOGIN", err);
-        next(err);
-    }    
 };
 
 accountCtrl.validate = async (req, res, next) => {
@@ -306,6 +240,66 @@ accountCtrl.validate = async (req, res, next) => {
 //         })
 //         .catch(err => next(err));
 // };
+
+const newTokens = async (user, collection, res) => {
+    // Gets the refresh token and its context cookie
+
+    const userId = user._id;
+    const collectionId = collection._id;
+    const refreshContext = secureRandom();
+    const stayLoggedIn = collection.stayLoggedIn
+    const refreshExpirationStr = stayLoggedIn
+        ? process.env.REFRESH_LONG_EXPIRATION
+        : process.env.REFRESH_SHORT_EXPIRATION;
+    const refreshExpiration = parseInt(refreshExpirationStr);
+    const { token: refreshToken, cookieOptions: refreshOptions } =
+        await getToken(refreshContext, refreshExpiration, {
+            sub: userId,
+            coll: collectionId,
+        });
+
+    res.cookie("__Host-refctx", refreshContext, refreshOptions);
+
+    // Gets the access token and its context cookie
+
+    const accessContext = secureRandom();
+    const accessExpirationStr = process.env.ACCESS_EXPIRATION;
+    const accessExpiration = parseInt(accessExpirationStr);
+    const hash = getHash(refreshContext);
+    const { token: accessToken, cookieOptions: accessOptions } = await getToken(
+        accessContext,
+        accessExpiration,
+        {
+            sub: userId,
+            coll: collectionId,
+            hash,
+        }
+    );
+
+    res.cookie("__Host-ctectx", accessContext, accessOptions);
+
+    // Remove validation cookie
+
+    const { maxAge, ...validationOptions } = accessOptions;
+
+    res.clearCookie("__Host-valctectx", validationOptions);
+
+    // Preparing the data to respond to the request.
+
+    user.password = "";
+
+    const userStr = JSON.stringify(user);
+    const collectionStr = JSON.stringify(collection);
+
+    // Throw an error to abort the transaction
+    // throw new Error("Oops!");
+
+    res.json({
+        status: 200,
+        message: "Ok",
+        data: [refreshToken, accessToken, userStr, collectionStr],
+    });
+};
 
 const addBlacklist = (context, iat, exp) => {
     console.log("CTX", context, "IAT", iat, "EXP", exp, "CTX",
