@@ -25,7 +25,11 @@ const V1 = /^\/V1/;
 const V2 = /^\/V1/;
 const V1_2 = /^\/V[1-2]/;
 const privateKey = fs.readFileSync(process.env.KEY, {encoding: "utf8"});
-const corsOptions = { origin: "https://localhost:4200", credentials: true };
+const corsOptions = {
+    origin: "https://localhost:4200",
+    credentials: true,
+    exposedHeaders: ["X-ownctx", "X-refctx", "X-ctectx", "X-forpwdvalctx"]
+};
 
 // Settings
 

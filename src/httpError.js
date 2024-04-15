@@ -3,11 +3,19 @@ const e404 = (req, res, next) => {
 };
 
 const e500 = (err, _req, res, _next) => {
-    const ierr = `Internal Error. ${JSON.stringify(err)}`;
+    const ierr = typeof err == "string"
+        ? err
+        : err.message ?? JSON.stringify(err);
     const status = err.status ?? 500
-    const message = err.message ?? (ierr.length > 35 ? 'Internal Error.' : ierr);
-    const data = err.data ?? []
-
+    const data = err.data ?? [];
+    const briefError = (ierr.split(":").pop() ?? "").trim();
+    const isBrief = briefError.length > 0 && briefError.length < 36; 
+    const message = isBrief ? ierr : `${ierr}:Internal Error.`;
+// console.log("ERR STRINGIFY", JSON.stringify(err));
+// console.log("ERR STATUS", err.status)
+// console.log("ERR MESSAGE", err.message)
+// console.log("ERR DATA", err.data)
+// console.log("ERR", err)
     res.status(status).json({ status, message, data });
 };
 

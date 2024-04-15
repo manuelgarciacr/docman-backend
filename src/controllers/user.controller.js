@@ -16,6 +16,27 @@ userCtrl.emailExists = async (req, res, next) => {
     }
 };
 
+userCtrl.userGet = async (req, res, next) => {
+    try {
+        const id = req.params.id;
+        const user = await User.findById(id).exec();
+
+        res.json({ status: 200, message: "", data: [user] });
+    } catch (err) {
+        return next(err);
+    }
+};
+
+userCtrl.users = async (req, res, next) => {
+    try {
+        const query = req.query;
+        const data = await User.find(query).exec();
+        res.json({ status: 200, message: "", data });
+    } catch (err) {
+        return next(err);
+    }
+};
+
 userCtrl.userAdd = async (req, res, next) => {
     res("userAdd")
 }

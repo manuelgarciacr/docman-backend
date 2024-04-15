@@ -1,10 +1,14 @@
-import { Schema, model } from "mongoose";
+import { Schema, model, Types } from "mongoose";
 
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
 
 const documentSchema = new Schema(
     {
+        collectionId: {
+            type: Types.ObjectId,
+            required: true
+        },
         name: {
             type: String,
             required: true,
@@ -21,4 +25,7 @@ const documentSchema = new Schema(
 
 documentSchema.index({ name: 1, folder: 1 }, { unique: true });
 
-export { documentSchema };
+const Document = model("Document", documentSchema);
+
+export { Document };
+

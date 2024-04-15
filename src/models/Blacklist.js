@@ -6,12 +6,18 @@ Schema.Types.String.checkRequired(v => v != null);
 
 const blacklistSchema = new Schema(
     {
+        context: {
+            type: String,
+            required: true,
+            unique: true
+        },
         hash: {
             type: String,
             required: true,
+            unique: true,
             default: function () {
                 
-                return getHash(this._id)
+                return getHash(this.context)
             },
         },
         expireAt: {

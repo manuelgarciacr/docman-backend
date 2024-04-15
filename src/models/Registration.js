@@ -7,12 +7,10 @@ const registrationSchema = new Schema(
     {
         userId: {
             type: Types.ObjectId,
-            ref: "User",
             required: true,
         },
         collectionId: {
             type: Types.ObjectId,
-            ref: "Collection",
             required: true,
         },
         UUID: {
@@ -34,7 +32,7 @@ const registrationSchema = new Schema(
     }
 );
 
-registrationSchema.index({ user: 1, collection: 1 }, { unique: true });
+registrationSchema.index({ userId: 1, collectionId: 1 }, { unique: true });
 
 registrationSchema.methods.setExpiration = function (seconds) {
     this.expireAt = Date.now() + seconds * 1000;

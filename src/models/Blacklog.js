@@ -7,7 +7,11 @@ const blacklogSchema = new Schema(
     {
         context: {
             type: String,
-            required: true
+            required: true,
+        },
+        hash: {
+            type: String,
+            required: true,
         },
         userId: {
             type: Types.ObjectId,
@@ -22,6 +26,11 @@ const blacklogSchema = new Schema(
         type: {
             type: String,
             enum: ["access", "refresh"],
+            required: true,
+        },
+        subtype: {
+            type: String,
+            enum: ["sidejacking"],
             required: true,
         },
     },

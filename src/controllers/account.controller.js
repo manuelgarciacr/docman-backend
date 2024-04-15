@@ -1,38 +1,35 @@
-import { User, Collection, Registration, Token } from "../models/index.js";
+import { User, Collection, Registration, Blacklist } from "../models/index.js";
 import mongoose from "mongoose"
-import { sendResource } from "../email.js";
 import crypto from "crypto";
 import { getRandomInt } from "../random.js";
-import { passport, getToken, validateToken, getHash, renewAccessToken } from "../tokens.js";
-import { checkSchema, validationResult } from "express-validator";
-import { ownerSignupSchema } from "./validationSchemas.js";
+import { setToken, validateToken, clearCookie, getHash } from "../tokens.js";
+// import { sendResource } from "../email.js";
+// import { checkSchema, validationResult } from "express-validator";
+// import { ownerSignupSchema } from "./validationSchemas.js";
 
 const accountCtrl = {};
 const db = mongoose.connection;
 const fn_pad = n => String(n).padStart(5, "0");
 const secureRandom = () => crypto.randomBytes(24).toString("hex");
 
-// accountCtrl.ownerSignupValidation = [
-//     (req, res, next) => {
-//         console.log("EMAIL1", req.body.user.email);
-//         next()
-//     },
-//     checkSchema(ownerSignupSchema),
-//     (req, res, next) => {
-//         const result = validationResult(req);
-        
-//         if (result.isEmpty()) {
-//             next();
-//             return
-//         }
+accountCtrl.authorization = async (req, res, next) => {
+    try {
+        const token = req.headers.authorization;
+        const decoded = await validateToken(token, ["ctectx", "refctx"], req.signedCookies);
+        const cookieName = decoded.cookieName;
+        if ( cookieName.startsWith('__Host-refctx') ){
+            const id = decoded.coll;
+            const collection = await Collection.findById(id);
+            const stayLoggedIn = collection.stayLoggedIn;
 
-//         const errArray = result.array().map(err => err.msg);
-//         const message = errArray.join(' ');
-//         const error = {status: 400, message , data: []}
-
-//         next(error);
-//     },
-// ];
+            await newTokens(decoded.sub, decoded.coll, stayLoggedIn, res);
+            clearCookie(cookieName, res)
+        }
+        next()
+    } catch (err) {
+        next(err)
+    }
+}
 
 accountCtrl.ownerSignup = async (req, res, next) => {
 
@@ -71,14 +68,13 @@ accountCtrl.ownerSignup = async (req, res, next) => {
             ); */
 
             const context = registration._id.toHexString();
-            const {token: ownerToken, cookieOptions} = await getToken(context, expiration);
 
-            res.cookie("__Host-valctectx", context, cookieOptions);
+            await setToken("ownctx", res, context, expiration);
 
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
 
-            res.json({ status: 200, message: "Ok", data: [ownerToken] });
+            res.json({ status: 200, message: "Ok", data: [] });
         })
         .catch(err => next(err));
 };
@@ -87,25 +83,20 @@ accountCtrl.ownerValidation = async (req, res, next) => {
 
     await db
         .transaction(async session => {
+            // Validate token and code
 
-            // Validate request and token
-
-            const valctectx = req.signedCookies["__Host-valctectx"];
             const ownerToken = req.headers.authorization;
-            const code = req.headers.code;
+            const code = req.header("X-Code");
 
-            if (
-                typeof valctectx != "string" ||
-                typeof ownerToken != "string" ||
-                typeof code != "string"
-            )
-                throw "Validation error";
+            if (typeof ownerToken != "string") throw "token:Validation error";
+            if (typeof code != "string") throw "code:Validation error";
 
-            await validateToken(ownerToken, valctectx);
+            const decoded = await validateToken(ownerToken, "ownctx", req.signedCookies);
 
             // Validate the code received
 
-            const id = mongoose.Types.ObjectId.createFromHexString(valctectx);
+            const context = decoded.context;
+            const id = mongoose.Types.ObjectId.createFromHexString(context);
             const registration = await Registration.findByIdAndDelete(id, {
                 session,
             });
@@ -124,7 +115,6 @@ accountCtrl.ownerValidation = async (req, res, next) => {
                 },
                 { session }
             );
-            collection.enabled = true;
 
             // Enabling user and removing expiration date
 
@@ -137,12 +127,15 @@ accountCtrl.ownerValidation = async (req, res, next) => {
                 },
                 { session }
             );
-            user.enabled = true;
+
+            await newTokens(userId, collectionId, collection.stayLoggedIn, res);
+
+            const cookieName = decoded.cookieName;
 
             // Throw an error to abort the transaction
             // throw new Error("Oops!");
 
-            newTokens(user, collection, res);
+            finishingValidation(cookieName, res, user, collection);
         })
         .catch(err => next(err));
 };
@@ -157,7 +150,7 @@ accountCtrl.login = async (req, res, next) => {
         const user = await User.findOne({ email });
         const collection = await Collection.findOne({ name });
         const users = collection?.users ?? [];
-console.log(req.httpVersion)
+
         if (!users.includes(user?._id)) throw ERROR;
 
         if (!(await user.checkPassword(password))) throw ERROR;
@@ -166,10 +159,12 @@ console.log(req.httpVersion)
 
         user.password = "";
 
+        await newTokens(user._id, collection._id, collection.stayLoggedIn, res);
+
         // Throw an error to abort the transaction
         // throw new Error("Oops!");
 
-        newTokens(user, collection, stayLoggedIn, res);
+        finishingValidation("", res, user, collection);
     } catch (err) {
         next(err);
     }
@@ -179,16 +174,24 @@ accountCtrl.logout = async (req, res, next) => {
 
     await db.transaction(async session => {
         const refreshToken = req.headers.authorization;
-        const context = req.signedCookies["__Host-refctx"];
 
-        if (typeof refreshToken != "string" || 
-            typeof context != "string")
-            throw "Logout error";
+        if (typeof refreshToken != "string" || refreshToken == "")
+            throw "token:Logout error";
 
-        await validateToken(refreshToken, context)
-        .then(token => {
-            addBlacklist(context, token.iat, token.exp)
-        })
+        await validateToken(refreshToken, "refctx", req.signedCookies).then(
+            async decoded => {
+                const context = decoded.context;
+                const hash = decoded.nonce;
+                const expireAt = decoded.exp * 1000;
+                const cookieName = decoded.cookieName;
+
+                clearCookie(cookieName, res);
+                
+                await Blacklist.create([{ context, hash, expireAt }], {
+                    session,
+                });
+            }
+        );
 
     }).catch(message => {
         console.log("LOGOUT ERROR", message)
@@ -200,6 +203,128 @@ accountCtrl.logout = async (req, res, next) => {
         });
     })
         
+};
+
+accountCtrl.forgotPassword = async (req, res, next) => {
+    const ERROR = { status: 404, message: "Invalid email or collection", data: [] };
+    
+    await db
+        .transaction(async session => {
+            const email = req.body.user.email;
+            const name = req.body.collection.name;
+            const user = await User.findOne({email});
+            const collection = await Collection.findOne({name});
+            const userId = user._id;
+            const users = collection?.users ?? [];
+
+            if (!users.includes(userId)) throw ERROR;
+            if (!user.enabled || !collection.enabled) throw ERROR;
+
+            const collectionId = collection._id;
+            const isRegistering = await Registration.findOne({ userId, collectionId });
+            
+            if (isRegistering != null) {
+                 res.json({
+                     status: 200,
+                     message: "Ok",
+                     data: [],
+                 });
+                 return
+            }
+
+            const code = fn_pad(getRandomInt(1, 99999));
+            const registration = new Registration({
+                userId,
+                collectionId,
+                code
+            });
+            const expiration = parseInt(process.env.VALIDATION_EXPIRATION);
+
+            registration.setExpiration(expiration);
+
+            await registration.save({ session });
+
+            console.log("code:", code);
+            /* sendResource(
+                process.env.EMAIL_USER,
+                user.email,
+                "Code",
+                code,
+                //process.env.REDIRECT + user.UUID
+            ); */
+
+            const context = registration._id.toHexString();
+
+            await setToken("forpwdvalctx", res, context, expiration)
+
+            // Throw an error to abort the transaction
+            // throw new Error("Oops!");
+
+            res.json({ status: 200, message: "Ok", data: [] });
+        })
+        .catch(err => next(err));
+};
+
+accountCtrl.forgotPasswordValidation = async (req, res, next) => {
+    await db
+        .transaction(async session => {
+            // Validate token, code and password
+
+            const forgotPasswordToken = req.headers.authorization;
+            const code = req.header("X-Code");
+            const pwd = req.header("X-Pwd");
+
+            if (typeof forgotPasswordToken != "string")
+                throw "token:Validation error";
+            if (typeof code != "string") throw "code:Validation error";
+            if (typeof pwd != "string") throw "pwd:Validation error";
+
+            const decoded = await validateToken(
+                forgotPasswordToken,
+                "forpwdvalctx",
+                req.signedCookies
+            );
+
+            // Validate the code received
+
+            const context = decoded.context;
+            const id = mongoose.Types.ObjectId.createFromHexString(context);
+            const registration = await Registration.findByIdAndDelete(id, {
+                session,
+            });
+
+            if (registration.code != code)
+                throw { status: 601, message: "Invalid code" };
+
+            // Validate password TODO: validate pwd construction
+
+            if (pwd == "") throw { status: 601, message: "Invalid password" };
+
+            // Changing user password
+
+            const userId = registration.userId;
+            const user = await User.findById(userId);
+
+            user.password = pwd; 
+            await user.hashPassword();
+            await user.save({ session });
+            
+            const collectionId = registration.collectionId;
+            const collection = await Collection.findById(
+                collectionId
+            );
+            const stayLoggedIn = collection.stayLoggedIn;
+
+            await newTokens(userId, collectionId, stayLoggedIn, res);
+
+            const cookieName = decoded.cookieName;
+
+            // Throw an error to abort the transaction
+            // throw new Error("Oops!");
+
+            finishingValidation(cookieName, res, user, collection)
+        })
+        .catch(err => next(err));
 };
 
 accountCtrl.validate = async (req, res, next) => {
@@ -217,48 +342,16 @@ accountCtrl.validate = async (req, res, next) => {
     }
 }
 
-// accountCtrl.cleanDB = async (req, res, next) => {
-//     await db
-//         .transaction(async session => {
-//             const users = await User.find({
-//                 enabled: false,
-//                 UUID: { $ne: "" },
-//             });
-//             console.log(users)
-//             for (const user of users) {
-//                 console.log("USER", user)
-//                 const collections = await Collection.find({
-//                     "users._id": user._id,
-//                 });
-//                 for (const coll of collections) {
-//                     if (coll.users == [user._id])
-//                         console.log("COLL1", coll);
-//                     if (coll.users.length() == 1 && coll.users[0] == user._id)
-//                         console.log("COLL2", coll)
-//                 }
-//             }
-//         })
-//         .catch(err => next(err));
-// };
-
-const newTokens = async (user, collection, res) => {
+const newTokens = async (sub, coll, stayLoggedIn, res) => {
     // Gets the refresh token and its context cookie
 
-    const userId = user._id;
-    const collectionId = collection._id;
     const refreshContext = secureRandom();
-    const stayLoggedIn = collection.stayLoggedIn
     const refreshExpirationStr = stayLoggedIn
         ? process.env.REFRESH_LONG_EXPIRATION
         : process.env.REFRESH_SHORT_EXPIRATION;
     const refreshExpiration = parseInt(refreshExpirationStr);
-    const { token: refreshToken, cookieOptions: refreshOptions } =
-        await getToken(refreshContext, refreshExpiration, {
-            sub: userId,
-            coll: collectionId,
-        });
 
-    res.cookie("__Host-refctx", refreshContext, refreshOptions);
+    await setToken("refctx", res, refreshContext, refreshExpiration, {sub, coll});
 
     // Gets the access token and its context cookie
 
@@ -266,27 +359,22 @@ const newTokens = async (user, collection, res) => {
     const accessExpirationStr = process.env.ACCESS_EXPIRATION;
     const accessExpiration = parseInt(accessExpirationStr);
     const hash = getHash(refreshContext);
-    const { token: accessToken, cookieOptions: accessOptions } = await getToken(
-        accessContext,
-        accessExpiration,
-        {
-            sub: userId,
-            coll: collectionId,
-            hash,
-        }
-    );
 
-    res.cookie("__Host-ctectx", accessContext, accessOptions);
+    await setToken("ctectx", res, accessContext, accessExpiration, { sub, coll, hash });
+};
 
-    // Remove validation cookie
+const finishingValidation = (cookieName, res, user, collection) => {
+ 
+    // Remove validation cookie if any
 
-    const { maxAge, ...validationOptions } = accessOptions;
-
-    res.clearCookie("__Host-valctectx", validationOptions);
+    if (typeof cookieName == "string" && cookieName!="")
+        clearCookie(cookieName, res);
 
     // Preparing the data to respond to the request.
 
     user.password = "";
+    user.enabled = true;
+    collection.enabled = true;
 
     const userStr = JSON.stringify(user);
     const collectionStr = JSON.stringify(collection);
@@ -297,13 +385,8 @@ const newTokens = async (user, collection, res) => {
     res.json({
         status: 200,
         message: "Ok",
-        data: [refreshToken, accessToken, userStr, collectionStr],
+        data: [userStr, collectionStr],
     });
-};
-
-const addBlacklist = (context, iat, exp) => {
-    console.log("CTX", context, "IAT", iat, "EXP", exp, "CTX",
-        typeof context, "IAT", typeof iat, "EXP", typeof exp)
-};
+}
 
 export { accountCtrl };

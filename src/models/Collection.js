@@ -1,5 +1,4 @@
 import { Schema, model, Types } from "mongoose";
-import { documentSchema } from './index.js';
 
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
@@ -47,7 +46,6 @@ const collectionSchema = new Schema(
             { type: Types.ObjectId, ref: "User", unique: true },
         ] /* owner is included */,
         roles: [{ type: String, enum: Object.keys(Role) }],
-        documents: [documentSchema],
     },
     {
         timestamps: true,
