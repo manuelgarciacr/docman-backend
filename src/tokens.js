@@ -53,7 +53,7 @@ const getCookieName = (type, cookies) => {
 const validateToken = async (token, type, cookies) => {
     try {
 
-        if (typeof token != "string") throw "token:Token validation error";
+        if (typeof token != "string") throw "token";
 
         const schema = token.substring(0, 7).toLowerCase()
 
@@ -65,26 +65,27 @@ const validateToken = async (token, type, cookies) => {
         const cookieName = decoded.cookieName;
 
         if (typeof cookieName != "string" || cookieName == "")
-            throw "cookieName:Token validation error";
+            throw "cookieName";
 
         const types = typeof type == "string" ? [type] : type;
         const typeOk = types.some(v => cookieName.startsWith(`__Host-${v}`));
 
         if (!typeOk)
-            throw "type:Token validation error";
+            throw "type";
 
         const context = cookies[cookieName];
 
         if (typeof context != "string") 
-            throw "cookie:Token validation error";
+            throw "cookie";
         
         const nonce = getHash(context);
 
         if (nonce != decoded.nonce) 
-            throw {
-                name: "JsonWebTokenError",
-                message: `jwt nonce invalid. expected: ${nonce}`,
-        };
+            // throw {
+            //     name: "JsonWebTokenError",
+            //     message: `jwt nonce invalid. expected: ${nonce}`,
+            throw "nonce"
+        //};
         
         const userId = decoded.sub;
         const collectionId = decoded.coll;
@@ -112,10 +113,14 @@ const validateToken = async (token, type, cookies) => {
         const message = typeof err == "string"
             ? err
             : err.message ?? "Token error";
-        const error = {message}
-        if (message.includes("jwt") || message.includes("invalid") || message.includes("Token")) {
-            error.status = 601;
-        }
+        // const error = {message}
+        // if (message.includes("jwt") || message.includes("invalid") || message.includes("Token")) {
+        //     error.status = 601;
+        // }
+        const error = {status: 601, message, data: []}
+        if (message != "jwt expired")
+            error.message += ":Token error";
+
         console.log("ERR", JSON.stringify(error));
         return Promise.reject(error);
     }

@@ -3,12 +3,8 @@ import { Schema, model, Types } from "mongoose";
 // Workaround bug. An empty String causes validation error when the field is required
 Schema.Types.String.checkRequired(v => v != null);
 
-const registrationSchema = new Schema(
+const invitationSchema = new Schema(
     {
-        userId: {
-            type: Types.ObjectId,
-            required: true,
-        },
         collectionId: {
             type: Types.ObjectId,
             required: true,
@@ -16,12 +12,18 @@ const registrationSchema = new Schema(
         email: {
             type: String,
             required: true,
-            default: ""
         },
-        code: {
+        name: {
             type: String,
+            required: true
+        },
+        userId: {
+            type: Types.ObjectId,
+            required: false,
+        },
+        UUID: {
+            type: Types.UUID,
             required: true,
-            default: "",
         },
         expireAt: {
             type: Date,
@@ -33,12 +35,12 @@ const registrationSchema = new Schema(
     }
 );
 
-registrationSchema.index({ userId: 1, collectionId: 1 }, { unique: true });
+invitationSchema.index({ collectionId: 1, email: 1 }, { unique: true });
 
-registrationSchema.methods.setExpiration = function (seconds) {
+invitationSchema.methods.setExpiration = function (seconds) {
     this.expireAt = Date.now() + seconds * 1000;
 };
 
-const Registration = model("Registration", registrationSchema);
+const Invitation = model("Invitation", invitationSchema);
 
-export { Registration };
+export { Invitation };

@@ -43,7 +43,7 @@ const collectionSchema = new Schema(
             expires: 0,
         },
         users: [
-            { type: Types.ObjectId, ref: "User", unique: true },
+            { type: Types.ObjectId },
         ] /* owner is included */,
         roles: [{ type: String, enum: Object.keys(Role) }],
     },

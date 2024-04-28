@@ -12,6 +12,6 @@ router.post("/accounts/forgotPasswordValidation", accountCtrl.forgotPasswordVali
 // router.post("/accounts/cleanDB", accountCtrl.cleanDB);
 router.get(
     /^\/[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/,
-    accountCtrl.validate
+    accountCtrl.invitationLink
 );
 export { router as accountsRouter };

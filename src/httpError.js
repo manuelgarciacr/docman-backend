@@ -15,7 +15,7 @@ const e500 = (err, _req, res, _next) => {
 // console.log("ERR STATUS", err.status)
 // console.log("ERR MESSAGE", err.message)
 // console.log("ERR DATA", err.data)
-// console.log("ERR", err)
+ console.log("ERR", err)
     res.status(status).json({ status, message, data });
 };
 

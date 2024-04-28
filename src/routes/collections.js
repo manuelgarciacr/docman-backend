@@ -6,6 +6,12 @@ const router = Router();
 const authenticate = accountCtrl.authorization;
 
 router.get("/collections/collection-exists", collectionCtrl.collectionExists); // one user email
-router.post("/collections/actualizeUsers", authenticate, collectionCtrl.actualizeUsers); 
+// router.post(
+//     "/collections/getUsers",
+//     authenticate,
+//     collectionCtrl.getUsers
+// ); 
+router.get("/collections/getUsers/:id", authenticate, collectionCtrl.getUsers);
+router.post("/collections/actualization/:id", authenticate, collectionCtrl.actualization); 
 
 export { router as collectionsRouter };

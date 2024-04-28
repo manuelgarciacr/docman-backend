@@ -1,29 +1,32 @@
-import { User, Collection, Registration, Blacklist } from "../models/index.js";
+import { User, Collection, Registration, Blacklist } from "../../models/index.js";
 import mongoose from "mongoose"
 import crypto from "crypto";
-import { getRandomInt } from "../random.js";
-import { setToken, validateToken, clearCookie, getHash } from "../tokens.js";
-// import { sendResource } from "../email.js";
+import { getRandomInt } from "../../random.js";
+import { setToken, validateToken, clearCookie, getHash } from "../../tokens.js";
+import { sendResource } from "../../email.js";
 // import { checkSchema, validationResult } from "express-validator";
 // import { ownerSignupSchema } from "./validationSchemas.js";
 
-const accountCtrl = {};
+const accountCtrl2 = {};
 const db = mongoose.connection;
 const fn_pad = n => String(n).padStart(5, "0");
 const secureRandom = () => crypto.randomBytes(24).toString("hex");
 
-accountCtrl.authorization = async (req, res, next) => {
+accountCtrl2.authorization = async (req, res, next) => {
     try {
         const token = req.headers.authorization;
         const decoded = await validateToken(token, ["ctectx", "refctx"], req.signedCookies);
         const cookieName = decoded.cookieName;
         if ( cookieName.startsWith('__Host-refctx') ){
-            const id = decoded.coll;
-            const collection = await Collection.findById(id);
-            const stayLoggedIn = collection.stayLoggedIn;
+            const context = decoded.context;
+            const hash = decoded.nonce;
+            const expireAt = decoded.exp * 1000;
+            const cookieName = decoded.cookieName;
+            const expiration = decoded.exp - Math.floor(Date.now() / 1000)
 
-            await newTokens(decoded.sub, decoded.coll, stayLoggedIn, res);
-            clearCookie(cookieName, res)
+            clearCookie(cookieName, res);
+            await Blacklist.create([{ context, hash, expireAt }]);
+            await newTokens(decoded.sub, decoded.coll, expiration, res);
         }
         next()
     } catch (err) {
@@ -31,7 +34,7 @@ accountCtrl.authorization = async (req, res, next) => {
     }
 }
 
-accountCtrl.ownerSignup = async (req, res, next) => {
+accountCtrl2.ownerSignup = async (req, res, next) => {
 
     await db
         .transaction(async session => {
@@ -59,13 +62,12 @@ accountCtrl.ownerSignup = async (req, res, next) => {
             await registration.save({ session })
 
             console.log("code:" , code)
-            /* sendResource(
-                process.env.EMAIL_USER,
-                user.email,
-                "Code",
-                code,
-                //process.env.REDIRECT + user.UUID
-            ); */
+            await sendResource(
+                process.env.EMAIL_USER, // From
+                user.email, // To
+                "Code", // Type
+                code, // Value
+            );
 
             const context = registration._id.toHexString();
 
@@ -79,7 +81,7 @@ accountCtrl.ownerSignup = async (req, res, next) => {
         .catch(err => next(err));
 };
 
-accountCtrl.ownerValidation = async (req, res, next) => {
+accountCtrl2.ownerValidation = async (req, res, next) => {
 
     await db
         .transaction(async session => {
@@ -140,7 +142,7 @@ accountCtrl.ownerValidation = async (req, res, next) => {
         .catch(err => next(err));
 };
 
-accountCtrl.login = async (req, res, next) => {
+accountCtrl2.login = async (req, res, next) => {
     const ERROR = { status: 404, message: "Invalid login data", data: [] };
 
     try {
@@ -170,7 +172,7 @@ accountCtrl.login = async (req, res, next) => {
     }
 };
 
-accountCtrl.logout = async (req, res, next) => {
+accountCtrl2.logout = async (req, res, next) => {
 
     await db.transaction(async session => {
         const refreshToken = req.headers.authorization;
@@ -187,9 +189,7 @@ accountCtrl.logout = async (req, res, next) => {
 
                 clearCookie(cookieName, res);
                 
-                await Blacklist.create([{ context, hash, expireAt }], {
-                    session,
-                });
+                await Blacklist.create([{ context, hash, expireAt }]);
             }
         );
 
@@ -205,151 +205,16 @@ accountCtrl.logout = async (req, res, next) => {
         
 };
 
-accountCtrl.forgotPassword = async (req, res, next) => {
-    const ERROR = { status: 404, message: "Invalid email or collection", data: [] };
-    
-    await db
-        .transaction(async session => {
-            const email = req.body.user.email;
-            const name = req.body.collection.name;
-            const user = await User.findOne({email});
-            const collection = await Collection.findOne({name});
-            const userId = user._id;
-            const users = collection?.users ?? [];
-
-            if (!users.includes(userId)) throw ERROR;
-            if (!user.enabled || !collection.enabled) throw ERROR;
-
-            const collectionId = collection._id;
-            const isRegistering = await Registration.findOne({ userId, collectionId });
-            
-            if (isRegistering != null) {
-                 res.json({
-                     status: 200,
-                     message: "Ok",
-                     data: [],
-                 });
-                 return
-            }
-
-            const code = fn_pad(getRandomInt(1, 99999));
-            const registration = new Registration({
-                userId,
-                collectionId,
-                code
-            });
-            const expiration = parseInt(process.env.VALIDATION_EXPIRATION);
-
-            registration.setExpiration(expiration);
-
-            await registration.save({ session });
-
-            console.log("code:", code);
-            /* sendResource(
-                process.env.EMAIL_USER,
-                user.email,
-                "Code",
-                code,
-                //process.env.REDIRECT + user.UUID
-            ); */
-
-            const context = registration._id.toHexString();
-
-            await setToken("forpwdvalctx", res, context, expiration)
-
-            // Throw an error to abort the transaction
-            // throw new Error("Oops!");
-
-            res.json({ status: 200, message: "Ok", data: [] });
-        })
-        .catch(err => next(err));
-};
-
-accountCtrl.forgotPasswordValidation = async (req, res, next) => {
-    await db
-        .transaction(async session => {
-            // Validate token, code and password
-
-            const forgotPasswordToken = req.headers.authorization;
-            const code = req.header("X-Code");
-            const pwd = req.header("X-Pwd");
-
-            if (typeof forgotPasswordToken != "string")
-                throw "token:Validation error";
-            if (typeof code != "string") throw "code:Validation error";
-            if (typeof pwd != "string") throw "pwd:Validation error";
-
-            const decoded = await validateToken(
-                forgotPasswordToken,
-                "forpwdvalctx",
-                req.signedCookies
-            );
-
-            // Validate the code received
-
-            const context = decoded.context;
-            const id = mongoose.Types.ObjectId.createFromHexString(context);
-            const registration = await Registration.findByIdAndDelete(id, {
-                session,
-            });
-
-            if (registration.code != code)
-                throw { status: 601, message: "Invalid code" };
-
-            // Validate password TODO: validate pwd construction
-
-            if (pwd == "") throw { status: 601, message: "Invalid password" };
-
-            // Changing user password
-
-            const userId = registration.userId;
-            const user = await User.findById(userId);
-
-            user.password = pwd; 
-            await user.hashPassword();
-            await user.save({ session });
-            
-            const collectionId = registration.collectionId;
-            const collection = await Collection.findById(
-                collectionId
-            );
-            const stayLoggedIn = collection.stayLoggedIn;
-
-            await newTokens(userId, collectionId, stayLoggedIn, res);
-
-            const cookieName = decoded.cookieName;
-
-            // Throw an error to abort the transaction
-            // throw new Error("Oops!");
-
-            finishingValidation(cookieName, res, user, collection)
-        })
-        .catch(err => next(err));
-};
-
-accountCtrl.validate = async (req, res, next) => {
-    const LINK = req.path.substr(1);
-
-    try {
-        const user = await User.findOne({ UUID: LINK, enabled: false  });
-        const URL = process.env.LINK + process.env.LANDING;
-        res.redirect(URL);
-        if (user != null)
-            res.redirect(process.env.REDIRECT)
-    } catch (err) {
-        console.error("CATCH IN VALIDATION", err);
-        next(err);
-    }
-}
-
-const newTokens = async (sub, coll, stayLoggedIn, res) => {
+const newTokens = async (sub, coll, expiration, res) => {
     // Gets the refresh token and its context cookie
 
     const refreshContext = secureRandom();
-    const refreshExpirationStr = stayLoggedIn
+    const refreshExpirationValue = typeof expiration == "number"
+        ? expiration
+        : expiration == true
         ? process.env.REFRESH_LONG_EXPIRATION
         : process.env.REFRESH_SHORT_EXPIRATION;
-    const refreshExpiration = parseInt(refreshExpirationStr);
+    const refreshExpiration = parseInt(refreshExpirationValue);
 
     await setToken("refctx", res, refreshContext, refreshExpiration, {sub, coll});
 
@@ -362,6 +227,10 @@ const newTokens = async (sub, coll, stayLoggedIn, res) => {
 
     await setToken("ctectx", res, accessContext, accessExpiration, { sub, coll, hash });
 };
+
+const replaceToken = () => {
+
+}
 
 const finishingValidation = (cookieName, res, user, collection) => {
  
@@ -389,4 +258,9 @@ const finishingValidation = (cookieName, res, user, collection) => {
     });
 }
 
-export { accountCtrl };
+import { accountCtrl as forgotPassword } from "./forgotpassword.controller.js";
+import { accountCtrl as invitation } from "./invitation.controller.js";
+
+const accountCtrl = {...accountCtrl2, ...forgotPassword, ...invitation};
+
+export { accountCtrl, newTokens, finishingValidation };

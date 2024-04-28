@@ -52,6 +52,8 @@ const createIonosTransporter = () =>
     nodemailer.createTransport({
         host: "smtp.ionos.es",
         port: 587,
+        maxConnections: 2,
+        maxMessages: 2,
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PWD,
@@ -67,6 +69,9 @@ const createCurlTransporter = () =>
         host: "smtp.office365.com",
         port: 587,
         secure: false,
+        pool: true,
+        maxConnections: 1,
+        maxMessages: 1,
         auth: {
             user: process.env.EMAIL_USER,
             pass: process.env.EMAIL_PWD,
@@ -86,14 +91,21 @@ let createTransporter = (env === 'production')
     //: createGmailTransporter;
 
 const sendEmail = async (emailOptions) => {
-    let emailTransporter = await createTransporter();
-    return emailTransporter.sendMail(emailOptions)
+    const emailTransporter = createTransporter();
+    const info = await emailTransporter.sendMail(emailOptions)
+    emailTransporter.close()
+    return info
 };
 
-const sendResource = (from, to, type, value) => {
-    const mailData = emailCfg.getMailData(type, value, from, to);
+const sendResource = async (expiration, from, to, type, value, collection) => {
+    try {
+        const mailData = emailCfg.getMailData(expiration, type, value, from, to, collection);
 
-    return sendEmail(mailData).then(msg => console.log(msg));
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        return await sendEmail(mailData).then(info => {}/*console.log(info)*/);
+    } catch (err) {
+        throw err
+    }
 };
 
 export { sendResource }
